@@ -1,0 +1,204 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: [ AWS::LanguageExtensions, AWS::Serverless-2016-10-31 ]
+Description: "Digital Identity IPV CRI Ipv-Cri-OTG-Hmrc-Smoke-Tests API"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [ dev, localdev, build, staging, integration, production ]
+    ConstraintDescription: must be dev, localdev, build, staging, integration or production
+  CodeSigningConfigArn:
+    Type: String
+    Default: ""
+
+Conditions:
+  EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
+  IsDevEnvironment: !Equals [ !Ref Environment, dev ]
+  IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ]
+  IsDevLikeEnvironment:
+    !Or [ !Condition IsLocalDevEnvironment, !Condition IsDevEnvironment ]
+  IsNotDevEnvironment: !Not
+    - !Condition IsDevLikeEnvironment
+
+Globals:
+  Function:
+    Timeout: 30
+    CodeUri: ..
+    Runtime: nodejs18.x
+    Architectures: [ arm64 ]
+
+Resources:
+
+  OTGCanariesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsNotDevEnvironment
+    Properties:
+      AlarmDescription: "Alarm for when OTG Canaries Fail"
+      AlarmName: "otg-canaries-failure"
+      ActionsEnabled: true
+      Namespace: "CloudWatchSynthetics"
+      MetricName: "Failed"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      Statistic: Sum
+      Period: 3600
+      Threshold: 3
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !ImportValue platform-alarm-warning-alert-topic
+      Dimensions:
+        - Name: "CanaryName"
+          Value: !Ref OTGCanaries
+
+  CanariesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service:
+                - synthetics.amazonaws.com
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: NinoCanariesExecutionRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: "*"
+                Action:
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                  - s3:ListAllMyBuckets
+                  - cloudwatch:PutMetricData
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+
+  CanariesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-otg-canaries-bucket
+
+  CanaryInvokerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Sourcemap: true
+    Properties:
+      Timeout: 60
+      Handler: lambdas/canary-invoker/src/canary-invoker-handler.lambdaHandler
+      LoggingConfig:
+        LogGroup: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
+      CodeSigningConfigArn:
+        !If [ EnforceCodeSigning, !Ref CodeSigningConfigArn, !Ref AWS::NoValue ]
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - synthetics:StartCanary
+              - synthetics:GetCanaryRuns
+            Resource: !Sub arn:aws:synthetics:${AWS::Region}:${AWS::AccountId}:canary:*
+
+  CanaryInvokerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
+      RetentionInDays: !If [ IsDevLikeEnvironment, 7, 30 ]
+
+  OTGCanaries:
+    Type: AWS::Synthetics::Canary
+    Properties:
+      Name: get-bearer-token
+      StartCanaryAfterCreation: true
+      ArtifactS3Location: !Sub s3://${CanariesBucket}/ci
+      ExecutionRoleArn: !GetAtt CanariesRole.Arn
+      RuntimeVersion: syn-nodejs-puppeteer-7.0
+      VPCConfig:
+        SecurityGroupIds:
+          - !ImportValue otg-vpc-AWSServicesEndpointSecurityGroupId
+        SubnetIds:
+          - !ImportValue otg-vpc-ProtectedSubnetIdA
+          - !ImportValue otg-vpc-ProtectedSubnetIdB
+      Schedule:
+        Expression: rate(15 minutes)
+      Tags:
+        - Key: blueprint
+          Value: canaryRecorder
+        - Key: code location
+          Value: ipv-cri-otg-hmrc-smoke-tests
+      Code:
+        Handler: exports.handler
+        Script:
+          !Sub
+          - |
+            const synthetics = require('Synthetics');
+            const syntheticsConfiguration = synthetics.getConfiguration();
+            const apiCanaryBlueprint = async function () {
+              syntheticsConfiguration.setConfig({
+                restrictedHeaders: [],
+                restrictedUrlParameters: []
+              });
+
+              const validateSuccessful = async function(res) {
+                return new Promise((resolve, reject) => {
+                  if (res.statusCode !== 200) {
+                    throw new Error(res.statusCode + ' ' + res.statusMessage);
+                  }
+                  let responseBody = '';
+                  res.on('data', (d) => {
+                    responseBody += d;
+                  });
+                  res.on('end', () => {
+                    const body = JSON.parse(responseBody);
+                    if (body.token != "goodToken" && body.expiry != "123456") {
+                      throw new Error("Unexpected body" + responseBody);
+                    }
+                    resolve();
+                  });
+                });
+              };
+              let requestOptionsStep1 = {
+                hostname: '${OtgURL}',
+                method: 'GET',
+                path: '/${env}/token?tokenType=monitoring',
+                port: '443',
+                protocol: 'https:',
+                body: "",
+                headers: {}
+              };
+              requestOptionsStep1['headers']['User-Agent'] = [synthetics.getCanaryUserAgentString(), requestOptionsStep1['headers']['User-Agent']].join(' ');
+              let stepConfig1 = {
+                includeRequestHeaders: false,
+                includeResponseHeaders: false,
+                includeRequestBody: false,
+                includeResponseBody: false,
+                continueOnHttpStepFailure: true
+              };
+              await synthetics.executeHttpStep('Verify https://${OtgURL}', requestOptionsStep1, validateSuccessful, stepConfig1);
+            };
+
+            exports.handler = async () => {
+              return await apiCanaryBlueprint();
+            };
+          - OtgURL: !Sub "{{resolve:ssm:/otg-hmrc-service/otg-service-url}}"
+            env: !Ref Environment
+
+Outputs:
+  CanaryInvokerFunction:
+    Description: CanaryInvoker Lambda Function Name
+    Value: !Ref CanaryInvokerFunction
+  CanaryInvokerFunctionArn:
+    Description: CanaryInvoker Lambda Function ARN
+    Value: !GetAtt CanaryInvokerFunction.Arn
+  CanaryInvokerFunctionIamRoleArn:
+    Description: Implicit IAM Role created for CanaryInvoker function
+    Value: !GetAtt CanaryInvokerFunctionRole.Arn
