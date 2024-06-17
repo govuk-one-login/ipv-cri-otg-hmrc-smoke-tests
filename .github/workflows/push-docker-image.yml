@@ -1,0 +1,36 @@
+name: Push Docker image
+
+on:
+  push:
+    branches: [main, smoke-tests-docker-image-dev]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  push-image:
+    name: Push image
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    strategy:
+      matrix:
+        environment: [development, build]
+    concurrency:
+      group: push-smoke-tests-image-${{ matrix.environment }}
+      cancel-in-progress: true
+    steps:
+      - name: Push Docker image
+        uses: govuk-one-login/github-actions/aws/ecr/build-docker-image@ac71be4023195de11f6cbcd07d56e6ab964e4e9e
+        if: ${{ guthub.ref_name != smoke-tests-docker-image-dev || matrix.environment == development }}
+        with:
+          immutable-tags: false
+          image-version: ${{ github.sha }}
+          aws-role-arn: ${{ vars.SMOKE_TESTS_DEPLOYMENT_ROLE_ARN }}
+          repository: ${{ vars.SMOKE_TESTS_IMAGE_REPOSITORY }}
+          dockerfile: test-image/Dockerfile
+          build-path: test-image
+          image-tags: |
+            smoke-tests-${{ github.head_ref || github.ref_name }}
+            latest
