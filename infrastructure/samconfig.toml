@@ -1,8 +1,22 @@
 version = 0.1
+
+[default.build.parameters]
+cached = true
+parallel = true
+
 [default.deploy.parameters]
-stack_name = "ipv-cri-otg-hmrc-smoke-tests"
-resolve_s3 = true
-s3_prefix = "ipv-cri-otg-hmrc-smoke-tests"
+stack_name = "<your-name>-st"
+
+capabilities = ["CAPABILITY_IAM"]
+fail_on_empty_changeset = false
+confirm_changeset = false
+s3_prefix = "localdev"
 region = "eu-west-2"
-capabilities = "CAPABILITY_IAM"
-image_repositories = []
+resolve_s3 = true
+
+tags = [
+    "cri:component=ipv-cri-otg-hmrc-smoke-tests",
+    "cri:deployment-source=manual",
+    "cri:application=Orange",
+    "cri:stack-type=dev"
+]

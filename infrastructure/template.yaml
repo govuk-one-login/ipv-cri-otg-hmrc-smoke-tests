@@ -1,25 +1,21 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Transform: [ AWS::LanguageExtensions, AWS::Serverless-2016-10-31 ]
-Description: "Digital Identity IPV CRI Ipv-Cri-OTG-Hmrc-Smoke-Tests API"
+Transform: [AWS::LanguageExtensions, AWS::Serverless-2016-10-31]
+Description: Digital Identity IPV CRI Ipv-Cri-OTG-Hmrc-Smoke-Tests API
 
 Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues: [ dev, localdev, build, staging, integration, production ]
+    AllowedValues: [dev, localdev, build, staging, integration, production]
     ConstraintDescription: must be dev, localdev, build, staging, integration or production
   CodeSigningConfigArn:
     Type: String
     Default: ""
 
 Conditions:
-  EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
-  IsDevEnvironment: !Equals [ !Ref Environment, dev ]
-  IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ]
-  IsDevLikeEnvironment:
-    !Or [ !Condition IsLocalDevEnvironment, !Condition IsDevEnvironment ]
-  IsNotDevEnvironment: !Not
-    - !Condition IsDevLikeEnvironment
+  UsePermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, ""]]
+  EnforceCodeSigning: !Not [!Equals [!Ref CodeSigningConfigArn, ""]]
+  IsNotDevEnvironment: !Not [!Equals [!Ref Environment, dev]]
 
 Globals:
   Function:
@@ -27,17 +23,21 @@ Globals:
     CodeUri: ..
     Runtime: nodejs18.x
     Architectures: [ arm64 ]
+    PermissionsBoundary: !If [ UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue ]
+    Environment:
+      Variables:
+        NODE_OPTIONS: --enable-source-maps
 
 Resources:
 
-  OTGCanariesAlarm:
+  OTGCanaryAlarm:
     Type: AWS::CloudWatch::Alarm
     Condition: IsNotDevEnvironment
     Properties:
-      AlarmDescription: "Alarm for when OTG Canaries Fail"
-      AlarmName: "otg-canaries-failure"
+      AlarmDescription: "Alarm for when OTG Canary Fail"
+      AlarmName: "otg-canary-failure"
       ActionsEnabled: true
-      Namespace: "CloudWatchSynthetics"
+      Namespace: SmokeTests
       MetricName: "Failed"
       ComparisonOperator: GreaterThanOrEqualToThreshold
       EvaluationPeriods: 1
@@ -49,30 +49,33 @@ Resources:
         - !ImportValue platform-alarm-warning-alert-topic
       Dimensions:
         - Name: "CanaryName"
-          Value: !Ref OTGCanaries
+          Value: !Ref OTGCanary
 
   CanariesRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !If [ UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue ]
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
             Action: sts:AssumeRole
             Principal:
-              Service:
-                - synthetics.amazonaws.com
-                - lambda.amazonaws.com
+              Service: lambda.amazonaws.com
       Policies:
         - PolicyName: NinoCanariesExecutionRole
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
+                Resource: !GetAtt CanariesBucket.Arn
+                Action: s3:GetBucketLocation
+              - Effect: Allow
+                Resource: !Sub ${CanariesBucket.Arn}/*
+                Action: s3:PutObject
+              - Effect: Allow
                 Resource: "*"
                 Action:
-                  - s3:PutObject
-                  - s3:GetBucketLocation
                   - s3:ListAllMyBuckets
                   - cloudwatch:PutMetricData
                   - logs:CreateLogGroup
@@ -85,7 +88,14 @@ Resources:
   CanariesBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub ${AWS::StackName}-otg-canaries-bucket
+      BucketName: !Sub ${AWS::StackName}-otg-canary-bucket
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   CanaryInvokerFunction:
     Type: AWS::Serverless::Function
@@ -97,24 +107,26 @@ Resources:
       Timeout: 60
       Handler: lambdas/canary-invoker/src/canary-invoker-handler.lambdaHandler
       LoggingConfig:
-        LogGroup: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
+        LogGroup: !Ref CanaryInvokerFunctionLogGroup
       CodeSigningConfigArn:
-        !If [ EnforceCodeSigning, !Ref CodeSigningConfigArn, !Ref AWS::NoValue ]
+        !If [EnforceCodeSigning, !Ref CodeSigningConfigArn, !Ref AWS::NoValue]
       Policies:
         - Statement:
             Effect: Allow
             Action:
+              - synthetics:GetCanary
+              - synthetics:StopCanary
               - synthetics:StartCanary
-              - synthetics:GetCanaryRuns
-            Resource: !Sub arn:aws:synthetics:${AWS::Region}:${AWS::AccountId}:canary:*
+              - synthetics:DescribeCanariesLastRun
+            Resource: !Sub arn:aws:synthetics:${AWS::Region}:${AWS::AccountId}:canary:${OTGCanary}
 
   CanaryInvokerFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
-      RetentionInDays: !If [ IsDevLikeEnvironment, 7, 30 ]
+      RetentionInDays: 30
 
-  OTGCanaries:
+  OTGCanary:
     Type: AWS::Synthetics::Canary
     Properties:
       Name: get-bearer-token
@@ -131,10 +143,10 @@ Resources:
       Schedule:
         Expression: rate(15 minutes)
       Tags:
-        - Key: blueprint
+        - Key: Blueprint
           Value: canaryRecorder
-        - Key: code location
-          Value: ipv-cri-otg-hmrc-smoke-tests
+        - Key: Repository
+          Value: govuk-one-login/ipv-cri-otg-hmrc-smoke-tests
       Code:
         Handler: exports.handler
         Script:
@@ -193,12 +205,9 @@ Resources:
             env: !Ref Environment
 
 Outputs:
-  CanaryInvokerFunction:
+  CanaryInvokerFunctionName:
     Description: CanaryInvoker Lambda Function Name
     Value: !Ref CanaryInvokerFunction
-  CanaryInvokerFunctionArn:
-    Description: CanaryInvoker Lambda Function ARN
-    Value: !GetAtt CanaryInvokerFunction.Arn
-  CanaryInvokerFunctionIamRoleArn:
-    Description: Implicit IAM Role created for CanaryInvoker function
-    Value: !GetAtt CanaryInvokerFunctionRole.Arn
+  CanaryNames:
+    Description: The names of the all canaries created by the stack
+    Value: !Ref OTGCanary
