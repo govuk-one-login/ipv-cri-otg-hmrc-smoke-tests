@@ -117,7 +117,7 @@ Resources:
   OTGCanaries:
     Type: AWS::Synthetics::Canary
     Properties:
-      Name: get-bearer-token
+      Name: !Sub ${AWS::StackName}-ci
       StartCanaryAfterCreation: true
       ArtifactS3Location: !Sub s3://${CanariesBucket}/ci
       ExecutionRoleArn: !GetAtt CanariesRole.Arn
