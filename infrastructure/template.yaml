@@ -11,9 +11,13 @@ Parameters:
   CodeSigningConfigArn:
     Type: String
     Default: ""
+  PermissionsBoundary:
+    Type: String
+    Default: ""
 
 Conditions:
   EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
+  UsePermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, ""]]
   IsDevEnvironment: !Equals [ !Ref Environment, dev ]
   IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ]
   IsDevLikeEnvironment:
@@ -27,6 +31,8 @@ Globals:
     CodeUri: ..
     Runtime: nodejs18.x
     Architectures: [ arm64 ]
+    PermissionsBoundary:
+      !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
 
 Resources:
 
@@ -54,6 +60,7 @@ Resources:
   CanariesRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
