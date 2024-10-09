@@ -2,7 +2,7 @@ name: Package for deployment
 on:
   workflow_dispatch:
   push:
-    branches: [main, OJ-2801-post-merge]
+    branches: [main]
 
 jobs:
   build:
