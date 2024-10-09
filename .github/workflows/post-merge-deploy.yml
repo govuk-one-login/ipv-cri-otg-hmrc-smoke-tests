@@ -1,0 +1,70 @@
+name: Package for deployment
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, OJ-2801-post-merge]
+
+jobs:
+  build:
+    name: Build SAM app
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.build.outputs.cache-key }}
+      cache-restore-keys: ${{ steps.build.outputs.cache-restore-keys }}
+    steps:
+      - name: Build SAM application
+        uses: govuk-one-login/github-actions/sam/build-application@c9c3f2ef04d9145894de83e973b0f4dc1e90d14e
+        id: build
+        with:
+          template: infrastructure/template.yaml
+          cache-name: otg-smoke-tests
+          pull-repository: true
+
+  deploy:
+    needs: build
+    name: Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ matrix.environment }}
+    strategy:
+      matrix:
+        environment: [development, build]
+    concurrency:
+      group: publish-${{ matrix.environment }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Check deployment enabled
+        id: enabled
+        if: ${{ github.ref_name == 'main' || matrix.environment == 'development' }}
+        shell: bash
+        run: exit 0
+
+      - name: Pull repository
+        if: ${{ steps.enabled.conclusion == 'success' }}
+        uses: actions/checkout@v4
+
+      - name: Get SAM artifact
+        if: ${{ steps.enabled.conclusion == 'success' }}
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ needs.build.outputs.cache-key }}
+          restore-keys: ${{ needs.build.outputs.cache-restore-keys }}
+          path: .aws-sam
+
+      - name: Assume temporary AWS role
+        if: ${{ steps.enabled.conclusion == 'success' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.GH_ACTIONS_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Upload to S3
+        if: ${{ steps.enabled.conclusion == 'success' }}
+        uses: govuk-one-login/devplatform-upload-action@v3.9.2
+        with:
+          artifact-bucket-name: ${{ vars.ARTIFACT_SOURCE_BUCKET_NAME }}
+          signing-profile-name: ${{ vars.SIGNING_PROFILE_NAME }}
+          working-directory: .aws-sam/build
