@@ -1,23 +1,21 @@
-name: Package for Build
+name: Package for deployment
 on:
   workflow_dispatch:
   push:
     branches: [main]
 
-concurrency:
-  group: post-merge-build
-  cancel-in-progress: false
-
 jobs:
   deploy:
-    name: Package for build
+    name: Publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment:
-      name: build
-    env:
-      AWS_REGION: eu-west-2
-      ENVIRONMENT: build
+    environment: ${{ matrix.environment }}
+    strategy:
+      matrix:
+        environment: [development, build]
+    concurrency:
+      group: publish-${{ matrix.environment }}
+      cancel-in-progress: false
     permissions:
       id-token: write
       contents: read
@@ -29,18 +27,19 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.GH_ACTIONS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: eu-west-2
 
       - name: Build SAM app
         uses: govuk-one-login/github-actions/sam/build-application@cd7d35dde348251237efbbaee5345e95adef0321
         id: build
         with:
           template: infrastructure/template.yaml
-          cache-key: otg-smoke-tests
+          cache-name: otg-smoke-tests
           pull-repository: false
 
-      - name: Deploy SAM app
+      - name: Upload to S3
         uses: govuk-one-login/devplatform-upload-action@v3.9.2
+        if: ${{ github.ref_name == 'main' || matrix.environment == 'development' }}
         with:
           artifact-bucket-name: ${{ vars.ARTIFACT_SOURCE_BUCKET_NAME }}
           signing-profile-name: ${{ vars.SIGNING_PROFILE_NAME }}
