@@ -60,34 +60,34 @@ Resources:
   CanariesRole:
     Type: AWS::IAM::Role
     Properties:
-      PermissionsBoundary: !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
+      PermissionsBoundary:
+        !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
             Action: sts:AssumeRole
             Principal:
-              Service:
-                - synthetics.amazonaws.com
-                - lambda.amazonaws.com
+              Service: lambda.amazonaws.com
       Policies:
         - PolicyName: NinoCanariesExecutionRole
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
+                Resource: !GetAtt CanariesBucket.Arn
+                Action: s3:GetBucketLocation
+              - Effect: Allow
+                Resource: !Sub ${CanariesBucket.Arn}/*
+                Action: s3:PutObject
+              - Effect: Allow
                 Resource: "*"
                 Action:
-                  - s3:PutObject
-                  - s3:GetBucketLocation
                   - s3:ListAllMyBuckets
-                  - cloudwatch:PutMetricData
+                  - logs:PutLogEvents
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - ec2:CreateNetworkInterface
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DeleteNetworkInterface
+                  - cloudwatch:PutMetricData
 
   CanariesBucket:
     Type: AWS::S3::Bucket
@@ -100,7 +100,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  CanaryInvokerFunction:
+  CanaryRunnerFunction:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
@@ -108,7 +108,8 @@ Resources:
         Sourcemap: true
     Properties:
       Timeout: 60
-      Handler: lambdas/canary-invoker/src/canary-invoker-handler.lambdaHandler
+      Handler: lambdas/canary-runner/src/canary-runner-handler.lambdaHandler
+      FunctionName: !Select [3, !Split ["/", !Ref CanaryRunnerFunctionLogGroup]]
       LoggingConfig:
         LogGroup: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
       CodeSigningConfigArn:
@@ -121,11 +122,11 @@ Resources:
               - synthetics:GetCanaryRuns
             Resource: !Sub arn:aws:synthetics:${AWS::Region}:${AWS::AccountId}:canary:*
 
-  CanaryInvokerFunctionLogGroup:
+  CanaryRunnerFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
-      RetentionInDays: !If [ IsDevLikeEnvironment, 7, 30 ]
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-CanaryRunnerFunction
+      RetentionInDays: 30
 
   OTGCanaries:
     Type: AWS::Synthetics::Canary
@@ -207,11 +208,11 @@ Resources:
 
 Outputs:
   CanaryInvokerFunction:
-    Description: CanaryInvoker Lambda Function Name
-    Value: !Ref CanaryInvokerFunction
+    Description: CanaryRunnerFunction Lambda Function Name
+    Value: !Ref CanaryRunnerFunction
   CanaryInvokerFunctionArn:
-    Description: CanaryInvoker Lambda Function ARN
-    Value: !GetAtt CanaryInvokerFunction.Arn
+    Description: CanaryRunnerFunction Lambda Function ARN
+    Value: !GetAtt CanaryRunnerFunction.Arn
   CanaryInvokerFunctionIamRoleArn:
-    Description: Implicit IAM Role created for CanaryInvoker function
-    Value: !GetAtt CanaryInvokerFunctionRole.Arn
+    Description: Implicit IAM Role created for CanaryRunnerFunction
+    Value: !GetAtt CanaryRunnerFunction.Arn
