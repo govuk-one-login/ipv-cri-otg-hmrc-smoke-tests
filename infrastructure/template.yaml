@@ -90,6 +90,9 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - cloudwatch:PutMetricData
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
 
   CanariesBucket:
     Type: AWS::S3::Bucket
