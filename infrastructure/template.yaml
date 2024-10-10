@@ -36,58 +36,60 @@ Globals:
 
 Resources:
 
-  OTGCanariesAlarm:
+  OTGHappyCanaryAlarm:
     Type: AWS::CloudWatch::Alarm
     Condition: IsNotDevEnvironment
     Properties:
-      AlarmDescription: "Alarm for when OTG Canaries Fail"
-      AlarmName: "otg-canaries-failure"
+      AlarmDescription: !Sub Triggers when the ${OTGHappyCanary} canary success percentage is <75 or no data present
+      AlarmName: !Sub ${OTGHappyCanary}-canary-failure
       ActionsEnabled: true
-      Namespace: "CloudWatchSynthetics"
-      MetricName: "Failed"
-      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Namespace: CloudWatchSynthetics
+      MetricName: SuccessPercent
+      ComparisonOperator: LessThanThreshold
       EvaluationPeriods: 1
-      Statistic: Sum
+      Statistic: Average
       Period: 3600
-      Threshold: 3
-      TreatMissingData: notBreaching
+      Threshold: 75
+      TreatMissingData: breaching
+      OKActions:
+        - !ImportValue platform-alarm-warning-alert-topic
       AlarmActions:
         - !ImportValue platform-alarm-warning-alert-topic
       Dimensions:
         - Name: "CanaryName"
-          Value: !Ref OTGCanaries
+          Value: !Ref OTGHappyCanary
 
   CanariesRole:
     Type: AWS::IAM::Role
     Properties:
-      PermissionsBoundary: !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
+      PermissionsBoundary:
+        !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
             Action: sts:AssumeRole
             Principal:
-              Service:
-                - synthetics.amazonaws.com
-                - lambda.amazonaws.com
+              Service: lambda.amazonaws.com
       Policies:
-        - PolicyName: NinoCanariesExecutionRole
+        - PolicyName: OtgCanariesExecutionRole
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
+                Resource: !GetAtt CanariesBucket.Arn
+                Action: s3:GetBucketLocation
+              - Effect: Allow
+                Resource: !Sub ${CanariesBucket.Arn}/*
+                Action: s3:PutObject
+              - Effect: Allow
                 Resource: "*"
                 Action:
-                  - s3:PutObject
-                  - s3:GetBucketLocation
                   - s3:ListAllMyBuckets
-                  - cloudwatch:PutMetricData
+                  - logs:PutLogEvents
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - ec2:CreateNetworkInterface
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DeleteNetworkInterface
+                  - cloudwatch:PutMetricData
 
   CanariesBucket:
     Type: AWS::S3::Bucket
@@ -100,7 +102,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  CanaryInvokerFunction:
+  CanaryRunnerFunction:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
@@ -108,31 +110,36 @@ Resources:
         Sourcemap: true
     Properties:
       Timeout: 60
-      Handler: lambdas/canary-invoker/src/canary-invoker-handler.lambdaHandler
+      Handler: lambdas/canary-runner/src/canary-runner-handler.lambdaHandler
+      FunctionName: !Select [3, !Split ["/", !Ref CanaryRunnerFunctionLogGroup]]
       LoggingConfig:
         LogGroup: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
       CodeSigningConfigArn:
         !If [ EnforceCodeSigning, !Ref CodeSigningConfigArn, !Ref AWS::NoValue ]
       Policies:
         - Statement:
+            Sid: AllowRunCanaries
             Effect: Allow
             Action:
+              - synthetics:GetCanary
+              - synthetics:StopCanary
               - synthetics:StartCanary
-              - synthetics:GetCanaryRuns
-            Resource: !Sub arn:aws:synthetics:${AWS::Region}:${AWS::AccountId}:canary:*
+              - synthetics:DescribeCanariesLastRun
+            Resource:
+              - !Sub arn:aws:synthetics:${AWS::Region}:${AWS::AccountId}:canary:${OTGHappyCanary}
 
-  CanaryInvokerFunctionLogGroup:
+  CanaryRunnerFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${AWS::StackName}/CanaryInvokerFunction
-      RetentionInDays: !If [ IsDevLikeEnvironment, 7, 30 ]
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-CanaryRunnerFunction
+      RetentionInDays: 30
 
-  OTGCanaries:
+  OTGHappyCanary:
     Type: AWS::Synthetics::Canary
     Properties:
-      Name: !Sub ${AWS::StackName}-ci
+      Name: !Sub ${AWS::StackName}-happy
       StartCanaryAfterCreation: true
-      ArtifactS3Location: !Sub s3://${CanariesBucket}/ci
+      ArtifactS3Location: !Sub s3://${CanariesBucket}/happy
       ExecutionRoleArn: !GetAtt CanariesRole.Arn
       RuntimeVersion: syn-nodejs-puppeteer-7.0
       VPCConfig:
@@ -206,12 +213,8 @@ Resources:
             env: !Ref Environment
 
 Outputs:
-  CanaryInvokerFunction:
-    Description: CanaryInvoker Lambda Function Name
-    Value: !Ref CanaryInvokerFunction
-  CanaryInvokerFunctionArn:
-    Description: CanaryInvoker Lambda Function ARN
-    Value: !GetAtt CanaryInvokerFunction.Arn
-  CanaryInvokerFunctionIamRoleArn:
-    Description: Implicit IAM Role created for CanaryInvoker function
-    Value: !GetAtt CanaryInvokerFunctionRole.Arn
+  CanaryNames:
+    Description: The names of the all canaries created by the stack
+    Value: !Join
+      - ","
+      - - !Ref OTGHappyCanary
