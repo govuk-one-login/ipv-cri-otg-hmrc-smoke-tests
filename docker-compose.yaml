@@ -4,4 +4,4 @@ services:
   run-tests:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: test-image/Dockerfile
