@@ -14,6 +14,12 @@ Parameters:
   PermissionsBoundary:
     Type: String
     Default: ""
+  OTGStackName:
+    Type: String
+    Default: otg-hmrc-service
+  VpcStackName:
+    Type: String
+    Default: otg-vpc
 
 Conditions:
   EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
@@ -202,7 +208,12 @@ Resources:
             exports.handler = async () => {
               return await apiCanaryBlueprint();
             };
-          - OtgURL: !Sub "{{resolve:ssm:/otg-hmrc-service/otg-service-url}}"
+          - OtgURL: !Sub
+            - "${PrivateApiGatewayId}-${VpceID}.execute-api.eu-west-2.amazonaws.com"
+            - PrivateApiGatewayId:
+                Fn::ImportValue: !Sub ${OTGStackName}-PrivateApiGatewayId
+              VpceID:
+                Fn::ImportValue: !Sub ${VpcStackName}-ExecuteApiGatewayEndpointId
             env: !Ref Environment
 
 Outputs:
