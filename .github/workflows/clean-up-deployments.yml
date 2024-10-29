@@ -14,31 +14,41 @@ permissions:
 concurrency: cleanup-dev-${{ github.head_ref || github.ref_name }}
 
 jobs:
-  delete-stacks:
-    name: Delete stale stacks
+  get-stale-stacks:
+    name: Get stale stacks
     runs-on: ubuntu-latest
     environment: development
+    outputs:
+      stacks: ${{ steps.get-stacks.outputs.stack-names-json }}
     steps:
-      - name: Assume AWS Role
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.DEPLOYMENT_ROLE_ARN }}
-          aws-region: eu-west-2
-
       - name: Get stale preview stacks
-        uses: govuk-one-login/github-actions/sam/get-stale-stacks@3b8133beab89c813cf15375904be82bf9ab79a91
+        uses: govuk-one-login/github-actions/sam/get-stale-stacks@d201191485b645ec856a34e5ca48636cf97b2574
+        id: get-stacks
         with:
+          aws-role-arn: ${{ vars.DEPLOYMENT_ROLE_ARN }}
           threshold-days: 14
           stack-name-filter: st
           stack-tag-filters: |
             cri:deployment-source=github-actions
             cri:stack-type=preview
           description: preview
-          env-var-name: STACKS
 
-      - name: Delete stacks
-        if: ${{ env.STACKS != null }}
-        uses: govuk-one-login/github-actions/sam/delete-stacks@3b8133beab89c813cf15375904be82bf9ab79a91
+  delete-stacks:
+    name: Delete ${{ matrix.stack }}
+    needs: get-stale-stacks
+    runs-on: ubuntu-latest
+    environment: development
+    if: ${{ needs.get-stale-stacks.outputs.stacks != '[]' }}
+    strategy:
+      max-parallel: 5
+      fail-fast: false
+      matrix:
+        stack: ${{ fromJSON(needs.get-stale-stacks.outputs.stacks) }}
+    steps:
+      - name: Delete stack
+        uses: govuk-one-login/github-actions/sam/delete-stacks@d201191485b645ec856a34e5ca48636cf97b2574
         with:
-          stack-names: ${{ env.STACKS }}
+          aws-role-arn: ${{ vars.DEPLOYMENT_ROLE_ARN }}
+          stack-names: ${{ matrix.stack }}
+          empty-buckets: true
           verbose: true
