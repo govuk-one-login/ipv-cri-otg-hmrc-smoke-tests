@@ -20,7 +20,7 @@
     "@aws-lambda-powertools/metrics": "1.14.2",
     "@aws-lambda-powertools/tracer": "1.14.2",
     "@aws-sdk/client-synthetics": "3.665.0",
-    "esbuild": "0.19.5"
+    "esbuild": "0.25.0"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudformation": "^3.668.0",
