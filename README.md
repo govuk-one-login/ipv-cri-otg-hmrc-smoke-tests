@@ -1,6 +1,6 @@
 # ipv-cri-otg-smoke-tests
 
-HMRC OTG Service Smoke Tests
+HMRC OTG Service Smoke Test
 
 ## Running Canaries Locally
 
