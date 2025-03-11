@@ -5,7 +5,6 @@ Description: "Digital Identity IPV CRI Ipv-Cri-OTG-Hmrc-Smoke-Tests API"
 Parameters:
   Environment:
     Type: String
-    Default: dev
     AllowedValues: [ dev, localdev, build, staging, integration, production ]
     ConstraintDescription: must be dev, localdev, build, staging, integration or production
   CodeSigningConfigArn:
@@ -24,8 +23,8 @@ Parameters:
 Conditions:
   EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
   UsePermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, ""]]
-  IsDevEnvironment: !Equals [ !Ref Environment, dev ] # cfn-lint: disable=W8003
-  IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ] # cfn-lint: disable=W8003
+  IsDevEnvironment: !Equals [ !Ref Environment, dev ]
+  IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ]
   IsDevLikeEnvironment:
     !Or [ !Condition IsLocalDevEnvironment, !Condition IsDevEnvironment ]
   IsNotDevEnvironment: !Not
