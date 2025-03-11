@@ -24,8 +24,8 @@ Parameters:
 Conditions:
   EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
   UsePermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundary, ""]]
-  IsDevEnvironment: !Equals [ !Ref Environment, dev ]
-  IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ]
+  IsDevEnvironment: !Equals [ !Ref Environment, dev ] # cfn-lint: disable=W8003
+  IsLocalDevEnvironment: !Equals [ !Ref Environment, localdev ] # cfn-lint: disable=W8003
   IsDevLikeEnvironment:
     !Or [ !Condition IsLocalDevEnvironment, !Condition IsDevEnvironment ]
   IsNotDevEnvironment: !Not
