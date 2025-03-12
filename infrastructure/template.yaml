@@ -5,7 +5,6 @@ Description: "Digital Identity IPV CRI Ipv-Cri-OTG-Hmrc-Smoke-Tests API"
 Parameters:
   Environment:
     Type: String
-    Default: dev
     AllowedValues: [ dev, localdev, build, staging, integration, production ]
     ConstraintDescription: must be dev, localdev, build, staging, integration or production
   CodeSigningConfigArn:
@@ -35,7 +34,7 @@ Globals:
   Function:
     Timeout: 30
     CodeUri: ..
-    Runtime: nodejs18.x
+    Runtime: nodejs22.x
     Architectures: [ arm64 ]
     PermissionsBoundary:
       !If [UsePermissionsBoundary, !Ref PermissionsBoundary, !Ref AWS::NoValue]
