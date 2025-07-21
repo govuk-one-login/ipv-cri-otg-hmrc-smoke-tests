@@ -149,7 +149,7 @@ Resources:
       StartCanaryAfterCreation: true
       ArtifactS3Location: !Sub s3://${CanariesBucket}/happy
       ExecutionRoleArn: !GetAtt CanariesRole.Arn
-      RuntimeVersion: syn-nodejs-puppeteer-7.0
+      RuntimeVersion: syn-nodejs-puppeteer-10.0
       VPCConfig:
         SecurityGroupIds:
           - !ImportValue otg-vpc-AWSServicesEndpointSecurityGroupId
