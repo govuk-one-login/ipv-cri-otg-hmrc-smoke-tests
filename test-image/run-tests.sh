@@ -54,6 +54,7 @@ echo "ℹ Running ${#canaries[@]} canaries from stack $stack_name using function
 success=true
 index=1
 
+# @quality_gate_integration_test @quality_gate_regression_test @quality_gate_stack_test
 for canary in "${canaries[@]}"; do
   echo "» [$((index++))/${#canaries[@]}] Running canary $canary"
 
