@@ -57,9 +57,9 @@ Resources:
       Threshold: 75
       TreatMissingData: breaching
       OKActions:
-        - !ImportValue platform-alarm-warning-alert-topic
+        - !ImportValue build-notifications-WarningAlertsTopicArn
       AlarmActions:
-        - !ImportValue platform-alarm-warning-alert-topic
+        - !ImportValue build-notifications-WarningAlertsTopicArn
       Dimensions:
         - Name: "CanaryName"
           Value: !Ref OTGHappyCanary
