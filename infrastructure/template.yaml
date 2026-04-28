@@ -211,7 +211,7 @@ Resources:
                 includeResponseBody: false,
                 continueOnHttpStepFailure: true
               };
-              await synthetics.executeHttpStep('Verify https://${OtgURL}', requestOptionsStep1, validateSuccessful, stepConfig1);
+              await synthetics.executeHttpStep('Verify OTG endpoint', requestOptionsStep1, validateSuccessful, stepConfig1);
             };
 
             exports.handler = async () => {
