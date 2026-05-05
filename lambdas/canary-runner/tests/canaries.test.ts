@@ -1,10 +1,9 @@
+import { describe, expect, it } from "vitest";
 import {
     CloudFormationClient,
     DescribeStacksCommand,
   } from "@aws-sdk/client-cloudformation";
   import { CanaryRunnerHandler } from "../src/canary-runner-handler";
-
-  jest.setTimeout(50 * 1000 * 4);
 
   const cloudFormation = new CloudFormationClient();
   const canaryRunner = new CanaryRunnerHandler();
