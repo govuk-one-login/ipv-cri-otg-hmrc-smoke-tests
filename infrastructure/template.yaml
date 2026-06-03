@@ -116,6 +116,10 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Sourcemap: true
+        Format: esm
+        Target: es2022
+        OutExtension:
+          - .js=.mjs
     Properties:
       Timeout: 60
       Handler: lambdas/canary-runner/src/canary-runner-handler.lambdaHandler
