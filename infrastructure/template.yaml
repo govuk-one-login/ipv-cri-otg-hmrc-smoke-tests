@@ -120,6 +120,8 @@ Resources:
         Target: es2022
         OutExtension:
           - .js=.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
     Properties:
       Timeout: 60
       Handler: lambdas/canary-runner/src/canary-runner-handler.lambdaHandler
