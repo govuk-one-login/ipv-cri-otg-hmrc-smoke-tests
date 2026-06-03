@@ -1,54 +1,54 @@
 import { describe, expect, it } from "vitest";
 import {
-    CloudFormationClient,
-    DescribeStacksCommand,
-  } from "@aws-sdk/client-cloudformation";
-  import { CanaryRunnerHandler } from "../src/canary-runner-handler";
+  CloudFormationClient,
+  DescribeStacksCommand,
+} from "@aws-sdk/client-cloudformation";
+import { CanaryRunnerHandler } from "../src/canary-runner-handler";
 
-  const cloudFormation = new CloudFormationClient();
-  const canaryRunner = new CanaryRunnerHandler();
+const cloudFormation = new CloudFormationClient();
+const canaryRunner = new CanaryRunnerHandler();
 
-  describe("Run canaries", () => {
-    it("All canaries should pass", async () => {
-      const canaryNames = await getCanaryNames();
-      let allPassed = true;
+describe("Run canaries", () => {
+  it("All canaries should pass", async () => {
+    const canaryNames = await getCanaryNames();
+    let allPassed = true;
 
-      for (const canary of canaryNames) {
-        const canaryRunResult = await canaryRunner.handler({
-          canaryName: canary,
-        });
+    for (const canary of canaryNames) {
+      const canaryRunResult = await canaryRunner.handler({
+        canaryName: canary,
+      });
 
-        allPassed = allPassed && canaryRunResult.passed;
-      }
+      allPassed = allPassed && canaryRunResult.passed;
+    }
 
-      expect(allPassed).toBe(true);
-    });
+    expect(allPassed).toBe(true);
   });
+});
 
-  async function getCanaryNames() {
-    const stackName = getEnvironmentVariable("STACK_NAME");
+async function getCanaryNames() {
+  const stackName = getEnvironmentVariable("STACK_NAME");
 
-    const stack = await cloudFormation.send(
-      new DescribeStacksCommand({ StackName: stackName })
-    );
+  const stack = await cloudFormation.send(
+    new DescribeStacksCommand({ StackName: stackName })
+  );
 
-    const canaryNames = stack.Stacks?.at(0)?.Outputs?.find(
-      (output) => output?.OutputKey === "CanaryNames"
-    )?.OutputValue;
+  const canaryNames = stack.Stacks?.at(0)?.Outputs?.find(
+    (output) => output?.OutputKey === "CanaryNames"
+  )?.OutputValue;
 
-    if (!canaryNames) {
-      throw new Error(`Could not get canary names for stack ${stackName}`);
-    }
-
-    return canaryNames.split(",");
+  if (!canaryNames) {
+    throw new Error(`Could not get canary names for stack ${stackName}`);
   }
 
-  function getEnvironmentVariable(name: string): string {
-    const value = process.env[name];
+  return canaryNames.split(",");
+}
 
-    if (!value) {
-      throw new Error(`${name} environment variable not set`);
-    }
+function getEnvironmentVariable(name: string): string {
+  const value = process.env[name];
 
-    return value;
+  if (!value) {
+    throw new Error(`${name} environment variable not set`);
   }
+
+  return value;
+}
