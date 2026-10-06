@@ -146,7 +146,7 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${AWS::StackName}-CanaryRunnerFunction
-      RetentionInDays: 30
+      RetentionInDays: 365
 
   OTGHappyCanary:
     Type: AWS::Synthetics::Canary
