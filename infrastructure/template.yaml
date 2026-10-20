@@ -18,7 +18,7 @@ Parameters:
     Default: otg-hmrc-service
   VpcStackName:
     Type: String
-    Default: otg-vpc
+    Default: spoke-vpc
 
 Conditions:
   EnforceCodeSigning: !Not [ !Equals [ !Ref CodeSigningConfigArn, "" ] ]
@@ -158,10 +158,11 @@ Resources:
       RuntimeVersion: syn-nodejs-puppeteer-13.0
       VPCConfig:
         SecurityGroupIds:
-          - !ImportValue otg-vpc-AWSServicesEndpointSecurityGroupId
+          - Fn::ImportValue: !Sub ${VpcStackName}-AWSServicesEndpointSecurityGroupId
         SubnetIds:
-          - !ImportValue otg-vpc-ProtectedSubnetIdA
-          - !ImportValue otg-vpc-ProtectedSubnetIdB
+          - Fn::ImportValue: !Sub ${VpcStackName}-ProtectedSubnetIdA
+          - Fn::ImportValue: !Sub ${VpcStackName}-ProtectedSubnetIdB
+          - Fn::ImportValue: !Sub ${VpcStackName}-ProtectedSubnetIdC
       Schedule:
         Expression: rate(15 minutes)
       Tags:
