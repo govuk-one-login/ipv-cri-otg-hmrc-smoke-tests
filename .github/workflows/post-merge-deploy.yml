@@ -13,7 +13,7 @@ jobs:
       cache-restore-keys: ${{ steps.build.outputs.cache-restore-keys }}
     steps:
       - name: Build SAM application
-        uses: govuk-one-login/github-actions/sam/build-application@d201191485b645ec856a34e5ca48636cf97b2574
+        uses: govuk-one-login/github-actions/sam/build-application@b5f4f92a0692bf297b08c43745e545e45631f0ee
         id: build
         with:
           template: infrastructure/template.yaml
@@ -44,11 +44,11 @@ jobs:
 
       - name: Pull repository
         if: ${{ steps.enabled.conclusion == 'success' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Get SAM artifact
         if: ${{ steps.enabled.conclusion == 'success' }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ needs.build.outputs.cache-key }}
           restore-keys: ${{ needs.build.outputs.cache-restore-keys }}
@@ -56,14 +56,14 @@ jobs:
 
       - name: Assume temporary AWS role
         if: ${{ steps.enabled.conclusion == 'success' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.GH_ACTIONS_ROLE_ARN }}
           aws-region: eu-west-2
 
       - name: Upload to S3
         if: ${{ steps.enabled.conclusion == 'success' }}
-        uses: govuk-one-login/devplatform-upload-action@v3.9.2
+        uses: govuk-one-login/devplatform-upload-action/sam@7076683de6e38a0ecdfbcd273b510a47c7b9489c # v4.4.0
         with:
           artifact-bucket-name: ${{ vars.ARTIFACT_SOURCE_BUCKET_NAME }}
           signing-profile-name: ${{ vars.SIGNING_PROFILE_NAME }}
